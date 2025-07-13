@@ -1,3 +1,4 @@
+# .github/workflows/deploy.yml
 name: Deploy
 
 on:
@@ -22,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ github.event.inputs.version }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -33,34 +35,34 @@ jobs:
             --password-stdin cr.yandex
 
       - name: Check Docker image exists
-        run: docker manifest inspect "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
+        run: docker manifest inspect "${REGISTRY}:${VERSION}_latest"
 
       - name: Deploy to prod via SSH
         uses: appleboy/ssh-action@v0.1.6
         with:
-          host: ${{ env.SSH_HOST }}
+          host:     ${{ env.SSH_HOST }}
           username: ${{ env.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          key:      ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             echo "${{ secrets.YCR_TOKEN }}" | docker login \
               --username "${{ secrets.YCR_USER }}" \
               --password-stdin cr.yandex
-            docker pull "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
+            docker pull "${REGISTRY}:${VERSION}_latest"
             docker stop shri-infra-hw || true
-            docker rm shri-infra-hw || true
-            docker run -d --name shri-infra-hw -p 3000:3000 "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
+            docker rm   shri-infra-hw || true
+            docker run -d --name shri-infra-hw -p 3000:3000 "${REGISTRY}:${VERSION}_latest"
 
       - name: Find Release Issue number
         run: |
           ISSUE_NUMBER=$(gh issue list --state all \
-            --search "Release ${{ env.VERSION }} deployed" \
+            --search "Release $VERSION deployed" \
             --json number --jq '.[0].number')
           echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
 
       - name: Comment on Release Issue
         uses: peter-evans/create-or-update-comment@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token:        ${{ secrets.GITHUB_TOKEN }}
           issue-number: ${{ env.ISSUE_NUMBER }}
           body: |
             Деплой версии ${{ env.VERSION }} на прод завершён  
