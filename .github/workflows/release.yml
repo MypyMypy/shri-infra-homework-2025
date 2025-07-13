@@ -1,4 +1,3 @@
-# .github/workflows/release.yml
 name: Release
 
 on:
@@ -48,10 +47,12 @@ jobs:
       VERSION: ${{ github.run_number }}
       REGISTRY: ${{ secrets.REGISTRY }}
     steps:
-      - name: Checkout code
+      - name: Checkout code with full history
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      - name: Configure Git
+      - name: Configure Git for pushes and tags
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
@@ -81,9 +82,14 @@ jobs:
 
       - name: Prepare issue body
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 --exclude "${{ env.VERSION }}" || echo "")
-          COMMITS=$(git log "$PREV_TAG..HEAD" --oneline)
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude "${{ env.VERSION }}" 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "$PREV_TAG..HEAD" --oneline)
+          else
+            COMMITS=$(git log --oneline)
+          fi
           DATE=$(date +'%Y-%m-%d')
+
           cat <<EOF > ISSUE_BODY.md
             Дата: $DATE
             Автор: ${{ github.actor }}
@@ -104,16 +110,24 @@ jobs:
 
       - name: Update CHANGELOG.md
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 --exclude "${{ env.VERSION }}" || echo "")
-          COMMITS=$(git log "$PREV_TAG..HEAD" --oneline)
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude "${{ env.VERSION }}" 2>/dev/null || echo "")
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "$PREV_TAG..HEAD" --oneline)
+          else
+            COMMITS=$(git log --oneline)
+          fi
           DATE=$(date +'%Y-%m-%d')
+
+          tmpfile=$(mktemp)
           {
             echo "## ${{ env.VERSION }} ($DATE)"
             echo
             echo "$COMMITS"
             echo
             cat CHANGELOG.md
-          } > CHANGELOG.md
+          } > "$tmpfile"
+          mv "$tmpfile" CHANGELOG.md
+
           git add CHANGELOG.md
           git commit -m "chore: update changelog for release ${{ env.VERSION }}"
           git push origin releases/${{ env.VERSION }}
