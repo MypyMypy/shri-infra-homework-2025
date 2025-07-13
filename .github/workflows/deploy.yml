@@ -46,9 +46,9 @@ jobs:
               --username "${{ secrets.YCR_USER }}" \
               --password-stdin cr.yandex
             docker pull "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
-            docker stop shri-infra || true
-            docker rm shri-infra || true
-            docker run -d --name shri-infra -p 3000:3000 "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
+            docker stop shri-infra-hw || true
+            docker rm shri-infra-hw || true
+            docker run -d --name shri-infra-hw -p 3000:3000 "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
 
       - name: Find Release Issue number
         run: |
