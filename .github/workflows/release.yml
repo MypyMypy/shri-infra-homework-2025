@@ -79,15 +79,15 @@ jobs:
           gh issue create \
             --title "Release ${{ github.run_number }} deployed" \
             --body <<EOF
-Дата: $DATE
-Автор: ${{ github.actor }}
-Версия: ${{ github.run_number }}
+          Дата: $DATE
+          Автор: ${{ github.actor }}
+          Версия: ${{ github.run_number }}
 
-Коммиты:
-$COMMITS
+          Коммиты:
+          $COMMITS
 
-Docker: ${{ env.REGISTRY }}:${{ github.run_number }}
-EOF
+          Docker: ${{ env.REGISTRY }}:${{ github.run_number }}
+          EOF
 
       - name: Update CHANGELOG.md
         run: |
