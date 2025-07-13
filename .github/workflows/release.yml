@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ${{ secrets.REGISTRY }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run test
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - uses: actions/checkout@v3
+      - name: Create release branch
+        uses: peter-evans/create-branch@v4
+        with:
+          branch: releases/${{ github.run_number }}
+      - name: Login to YCR
+        run: echo "${{ secrets.YCR_TOKEN }}" | docker login --username "${{ secrets.YCR_USER }}" --password-stdin cr.yandex
+      - name: Build & Push Docker images
+        run: |
+          VERSION=${{ github.run_number }}
+          IMAGE=${{ env.REGISTRY }}
+          docker build -t $IMAGE:$VERSION .
+          docker tag $IMAGE:$VERSION $IMAGE:${VERSION}_latest
+          docker push $IMAGE:$VERSION
+          docker push $IMAGE:${VERSION}_latest
+      - name: Create git tag
+        run: |
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+      - name: Create GitHub Issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude "${{ github.run_number }}" || echo "")
+          COMMITS=$(git log $PREV_TAG..HEAD --oneline)
+          DATE=$(date +'%Y-%m-%d')
+          gh issue create \
+            --title "Release ${{ github.run_number }} deployed" \
+            --body "Дата: $DATE
+Автор: ${{ github.actor }}
+Версия: ${{ github.run_number }}
+
+Коммиты:
+$COMMITS
+
+Docker: ${{ env.REGISTRY }}:${{ github.run_number }}"
+
+      
+      - name: Update CHANGELOG.md
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 --exclude "${{ github.run_number }}" || echo "")
+          COMMITS=$(git log $PREV_TAG..HEAD --oneline)
+          DATE=$(date +'%Y-%m-%d')
+          {
+            echo "## ${{ github.run_number }} ($DATE)"
+            echo
+            echo "$COMMITS"
+            echo
+            cat CHANGELOG.md
+          } > CHANGELOG.md
+
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add CHANGELOG.md
+          git commit -m "chore: update changelog for release ${{ github.run_number }}"
+          git push origin releases/${{ github.run_number }}
