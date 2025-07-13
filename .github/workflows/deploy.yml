@@ -1,0 +1,68 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to deploy'
+        required: true
+
+permissions:
+  contents: read
+  packages: read
+  issues: write
+
+env:
+  REGISTRY: ${{ vars.REGISTRY }}
+  SSH_HOST: ${{ secrets.SSH_HOST }}
+  SSH_USER: ${{ secrets.SSH_USER }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ github.event.inputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Login to Yandex Container Registry
+        run: |
+          echo "${{ secrets.YCR_TOKEN }}" | docker login \
+            --username "${{ secrets.YCR_USER }}" \
+            --password-stdin cr.yandex
+
+      - name: Check Docker image exists
+        run: docker manifest inspect "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
+
+      - name: Deploy to prod via SSH
+        uses: appleboy/ssh-action@v0.1.6
+        with:
+          host: ${{ env.SSH_HOST }}
+          username: ${{ env.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "${{ secrets.YCR_TOKEN }}" | docker login \
+              --username "${{ secrets.YCR_USER }}" \
+              --password-stdin cr.yandex
+            docker pull "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
+            docker stop shri-infra || true
+            docker rm shri-infra || true
+            docker run -d --name shri-infra -p 3000:3000 "${{ env.REGISTRY }}:${{ env.VERSION }}_latest"
+
+      - name: Find Release Issue number
+        run: |
+          ISSUE_NUMBER=$(gh issue list --state all \
+            --search "Release ${{ env.VERSION }} deployed" \
+            --json number --jq '.[0].number')
+          echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV
+
+      - name: Comment on Release Issue
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          issue-number: ${{ env.ISSUE_NUMBER }}
+          body: |
+            Деплой версии ${{ env.VERSION }} на прод завершён  
+            Дата: $(date +'%Y-%m-%d')  
+            Кто: ${{ github.actor }}
