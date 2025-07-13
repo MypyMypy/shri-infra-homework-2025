@@ -13,7 +13,7 @@ permissions:
   issues: write
 
 env:
-  REGISTRY: ${{ vars.REGISTRY }}
+  REGISTRY: ${{ secrets.REGISTRY }}
   SSH_HOST: ${{ secrets.SSH_HOST }}
   SSH_USER: ${{ secrets.SSH_USER }}
 
